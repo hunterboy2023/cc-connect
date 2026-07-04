@@ -235,6 +235,18 @@ func New(opts map[string]any) (core.Agent, error) {
 		}
 	}
 
+	// Surface CLAUDE_CODE_DIST_DIR from config env to the current process
+	// so claudeConfigHomeDir() (used by the hook runner and skill resolver)
+	// reads settings from the same dist directory as the spawned claude.
+	if _, ok := os.LookupEnv("CLAUDE_CODE_DIST_DIR"); !ok {
+		for _, e := range configEnv {
+			if after, ok := strings.CutPrefix(e, "CLAUDE_CODE_DIST_DIR="); ok {
+				os.Setenv("CLAUDE_CODE_DIST_DIR", after)
+				break
+			}
+		}
+	}
+
 	// Eagerly materialise the shared cc-connect-system.md at startup so
 	// the file exists on disk before the first spawn. claude reads it
 	// via --append-system-prompt-file; the lazy fallback in
@@ -986,7 +998,13 @@ func (a *Agent) SkillDirs() []string {
 func (a *Agent) CompressCommand() string { return "/compact" }
 
 func claudeConfigHomeDir() string {
+	// CLAUDE_CONFIG_DIR is the canonical Claude Code config dir override.
 	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); dir != "" {
+		return dir
+	}
+	// CLAUDE_CODE_DIST_DIR is used by modified/compiled Claude Code builds.
+	// Their settings.json lives directly inside the dist directory.
+	if dir := strings.TrimSpace(os.Getenv("CLAUDE_CODE_DIST_DIR")); dir != "" {
 		return dir
 	}
 	home, err := os.UserHomeDir()
